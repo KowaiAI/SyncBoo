@@ -12,6 +12,24 @@ import fs from "fs";
 
 const upload = multer({ dest: "uploads/" });
 
+// Absolute path to the uploads directory
+const uploadsDir = path.resolve(__dirname, "../uploads");
+
+/**
+ * Validates that the given filePath is contained within the uploadsDir.
+ * Returns true if valid, false otherwise.
+ */
+function validateFilePath(filePath: string, uploadsDir: string): boolean {
+  try {
+    const resolvedPath = fs.realpathSync(path.resolve(filePath));
+    // Ensure uploadsDir is normalized and real
+    const uploadsRealPath = fs.realpathSync(uploadsDir);
+    return resolvedPath.startsWith(uploadsRealPath + path.sep);
+  } catch (err) {
+    // If resolving fails, treat as invalid
+    return false;
+  }
+}
 // Define the absolute path to uploads directory
 const uploadsDir = path.resolve("uploads");
 
@@ -409,8 +427,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Invalid file path" });
       }
 
-      // Parse the file content
-      const fileContent = fs.readFileSync(file.path, "utf-8");
+      // Parse the file
       
       let bookmarks: any[] = [];
       let sourceType = "file";
