@@ -17,6 +17,7 @@ import {
   type InsertImportHistory,
 } from "@shared/schema";
 import { db } from "./db";
+import * as crypto from "crypto";
 import { eq, desc, and, ilike, count, sql } from "drizzle-orm";
 
 export interface IStorage {
@@ -72,7 +73,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createUser(userData: InsertUser): Promise<User> {
-    const userId = userData.id || `user_${Date.now()}_${Math.random().toString(36).substring(2)}`;
+    const userId = userData.id || `user_${Date.now()}_${crypto.randomBytes(8).toString("hex")}`;
     const [user] = await db
       .insert(users)
       .values({ ...userData, id: userId })
