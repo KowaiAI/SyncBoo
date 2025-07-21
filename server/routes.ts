@@ -427,6 +427,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Invalid file path" });
       }
 
+      // Normalize and ensure file path is within the uploads directory
+      const resolvedPath = fs.realpathSync(path.resolve(file.path));
+      if (!resolvedPath.startsWith(fs.realpathSync(uploadsDir))) {
+        console.error("Resolved file path escapes uploads directory:", resolvedPath);
+        return res.status(400).json({ message: "Invalid file path" });
+      }
+
       // Parse the file
       
       let bookmarks: any[] = [];
@@ -505,10 +512,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
 
       // Security: Clean up uploaded file with path validation
-      if (validateFilePath(file.path, uploadsDir)) {
-        fs.unlinkSync(file.path);
+      const resolvedPath = fs.realpathSync(path.resolve(file.path));
+      if (resolvedPath.startsWith(fs.realpathSync(uploadsDir))) {
+        fs.unlinkSync(resolvedPath);
       } else {
-        console.error("Cannot clean up file with invalid path:", file.path);
+        console.error("Cannot clean up file with invalid path:", resolvedPath);
       }
 
       res.json({
