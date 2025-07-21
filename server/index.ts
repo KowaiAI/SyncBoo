@@ -1,6 +1,7 @@
 import express, { type Request, Response, NextFunction } from "express";
 import cookieParser from "cookie-parser";
 import helmet from "helmet";
+import { csrf } from "lusca";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 
@@ -21,6 +22,7 @@ app.use(helmet({
 }));
 
 app.use(cookieParser());
+app.use(csrf());
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
