@@ -12,6 +12,21 @@ import fs from "fs";
 
 const upload = multer({ dest: "uploads/" });
 
+// Define the absolute path to uploads directory
+const uploadsDir = path.resolve("uploads");
+
+// Validate that the file path is contained within the uploads directory
+function validateFilePath(filePath: string, uploadsDir: string): boolean {
+  try {
+    // Resolve and normalize the file path
+    const absPath = fs.realpathSync(path.resolve(filePath));
+    // Ensure absPath starts with uploadsDir path
+    return absPath.startsWith(uploadsDir + path.sep);
+  } catch (error) {
+    // If resolving fails, treat path as invalid
+    return false;
+  }
+}
 // Security: Ensure uploads directory exists and has proper permissions
 const uploadsDir = path.resolve("uploads");
 try {
