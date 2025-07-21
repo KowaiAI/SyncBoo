@@ -6,8 +6,64 @@ import { insertBookmarkSchema, insertCollectionSchema, insertDeviceSchema } from
 import { z } from "zod";
 import multer from "multer";
 import { fromError } from "zod-validation-error";
+import lusca from "lusca";
+import path from "path";
+import fs from "fs";
 
 const upload = multer({ dest: "uploads/" });
+
+// Security: Ensure uploads directory exists and has proper permissions
+const uploadsDir = path.resolve("uploads");
+try {
+  if (!fs.existsSync(uploadsDir)) {
+    fs.mkdirSync(uploadsDir, { mode: 0o755 });
+    console.log("Created uploads directory with secure permissions");
+  } else {
+    // Check if directory permissions are secure (not world-writable)
+    const stats = fs.statSync(uploadsDir);
+    const mode = stats.mode & parseInt('777', 8);
+    if (mode & parseInt('002', 8)) {
+      console.warn("WARNING: uploads directory is world-writable, this is a security risk");
+    }
+  }
+} catch (error) {
+  console.error("Failed to setup uploads directory:", error);
+  throw new Error("Cannot create secure uploads directory");
+}
+
+// Security: CSRF protection middleware for state-changing operations
+// Only apply to browser-facing, state-changing routes (POST, PATCH, DELETE, PUT)
+const csrfProtection = lusca.csrf({
+  cookie: {
+    name: '_csrf',
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict'
+  }
+});
+
+// Helper function to determine if route needs CSRF protection
+function needsCSRFProtection(method: string, path: string): boolean {
+  // Only protect state-changing methods for browser routes
+  const stateChangingMethods = ['POST', 'PATCH', 'DELETE', 'PUT'];
+  const isBrowserRoute = !path.includes('/api/auth/') && !path.includes('/api/export');
+  return stateChangingMethods.includes(method.toUpperCase()) && isBrowserRoute;
+}
+
+// Security: Secure file path validation to prevent directory traversal
+function validateFilePath(filePath: string, allowedDirectory: string): boolean {
+  try {
+    const resolvedPath = path.resolve(filePath);
+    const resolvedAllowedDir = path.resolve(allowedDirectory);
+    const relativePath = path.relative(resolvedAllowedDir, resolvedPath);
+    
+    // File must be within the allowed directory and not use .. to escape
+    return !relativePath.startsWith('..') && !path.isAbsolute(relativePath);
+  } catch (error) {
+    console.error("File path validation error:", error);
+    return false;
+  }
+}
 
 // Helper functions for bookmark parsing and export
 function parseNetscapeBookmarks(content: string): any[] {
@@ -119,6 +175,19 @@ function generateXmlBookmarks(bookmarks: any[], options: any = {}): string {
 export async function registerRoutes(app: Express): Promise<Server> {
   // Auth middleware
   setupSimpleAuth(app);
+
+  // Security: Apply CSRF protection conditionally to state-changing browser routes
+  app.use((req, res, next) => {
+    if (needsCSRFProtection(req.method, req.path)) {
+      return csrfProtection(req, res, next);
+    }
+    next();
+  });
+
+  // Security: Expose CSRF token for frontend use
+  app.get('/api/csrf-token', (req, res) => {
+    res.json({ csrfToken: res.locals._csrf });
+  });
 
   // Auth routes
   app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
@@ -319,8 +388,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "No file uploaded" });
       }
 
+      // Security: Validate file path to prevent directory traversal attacks
+      if (!validateFilePath(file.path, uploadsDir)) {
+        console.error("Invalid file path detected:", file.path);
+        return res.status(400).json({ message: "Invalid file path" });
+      }
+
       // Parse the file content
-      const fs = await import("fs");
       const fileContent = fs.readFileSync(file.path, "utf-8");
       
       let bookmarks: any[] = [];
@@ -398,8 +472,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         status: "completed",
       });
 
-      // Clean up uploaded file
-      fs.unlinkSync(file.path);
+      // Security: Clean up uploaded file with path validation
+      if (validateFilePath(file.path, uploadsDir)) {
+        fs.unlinkSync(file.path);
+      } else {
+        console.error("Cannot clean up file with invalid path:", file.path);
+      }
 
       res.json({
         success: true,
