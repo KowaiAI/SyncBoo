@@ -321,7 +321,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Parse the file content
       const fs = await import("fs");
-      const fileContent = fs.readFileSync(file.path, "utf-8");
+      const path = await import("path");
+      
+      const uploadsDir = path.resolve("uploads");
+      const resolvedPath = path.resolve(file.path);
+      
+      // Validate that the resolved path is within the uploads directory
+      if (!resolvedPath.startsWith(uploadsDir)) {
+        return res.status(403).json({ message: "Invalid file path" });
+      }
+      
+      const fileContent = fs.readFileSync(resolvedPath, "utf-8");
       
       let bookmarks: any[] = [];
       let sourceType = "file";
